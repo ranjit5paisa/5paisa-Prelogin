@@ -436,18 +436,6 @@ curl -X GET "https://www.5paisa.com/price-range-filter/TCS/1W" \
 
 **Valid Range Filters:** `1D`, `1W`, `1M`, `6M`, `1Y`, `5Y`, `Max`
 
----
-
-### 26. YouTube Videos
-**Source:** [`StockPageController.php`](../modules/custom/fivepaisa_stock_page/src/Controller/StockPageController.php:1690-1751)
-
-```bash
-curl -X GET "https://www.5paisa.com/get-youtube-videos/TCS" \
-  -H "Accept: application/json" \
-  -H "User-Agent: Mozilla/5.0"
-```
-
----
 
 ## Authentication & Headers
 

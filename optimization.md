@@ -82,7 +82,7 @@
 
 3. **Enable render caching** - Cache full page for 5-10 minutes during market hours, 1 hour after hours
 
-4. **Optimize database queries** - Add indexes on frequently queried fields (field_author, field_news_categories)
+4. **Optimize database queries** - Add indexes on frequently queried fields
 
 #### Client-Side Optimizations:
 5. **Defer non-critical AJAX calls** - Don't load polls, similar stocks immediately

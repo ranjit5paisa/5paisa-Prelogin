@@ -87,7 +87,7 @@ curl -X GET "https://www.5paisa.com/stocks/tcs-share-price" \
 - `/stocks/reliance-share-price`
 - `/stocks/infosys-share-price`
 
-**Expected Response Time:** 3 - 4.0s (includes multiple sequential backend API calls)
+**Expected Response Time:** 3.0s - 4.0s (includes multiple sequential backend API calls)
 
 ---
 

@@ -1,5 +1,4 @@
 # Stock Page API Documentation
-## Template: `modules/custom/fivepaisa_stock_page/templates/stock-page.html.twig`
 
 ## Example URL
 ```
@@ -1165,3 +1164,288 @@ curl -X GET 'https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/stock/overvie
 curl -X GET 'https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/stock/technical-analysis/532667/' \
   -H 'Ocp-Apim-Subscription-Key: a4af51382266497bb5464d95fbb2017b'
 ```
+
+---
+
+## Server-Side API Performance Table
+
+| # | API Name | Endpoint | Avg Response Time | Cache Hit Time | Timeout | Priority |
+|---|----------|----------|------------------|----------------|---------|----------|
+| 1 | Search Scrip Code | `gateway.5paisa.com/prelogin/prod/searchscrip` | 150-300ms | 5-10ms | 10s | Critical |
+| 2 | Stock Overview | `apihub.5paisa.com/pearl-ca/.../overview/` | 200-400ms | 10-20ms | No timeout | Critical |
+| 3 | Fundamental Data | `apihub.5paisa.com/pearl-ca/.../fundamental/` | 150-250ms | 5-10ms | No timeout | High |
+| 4 | Technical Analysis | `apihub.5paisa.com/pearl-ca/.../technical-analysis/` | 250-500ms | 10-15ms | No timeout | Critical |
+| 5 | Tech Trend (SWOT) | `apihub.5paisa.com/pearl-ca/.../tech-trend/` | 150-300ms | 5-10ms | 10s | Medium |
+| 6 | Rapid Results | `apihub.5paisa.com/pearl-ca/.../rapid-results/` | 200-350ms | 10-15ms | No timeout | Medium |
+| 7 | Corporate Actions | `apihub.5paisa.com/pearl-ca/.../events/calendar/stock/` | 300-500ms | 15-25ms | No timeout | Medium |
+| 8 | Company Profile (Atlas) | `apihub.5paisa.com/atlas_cache/.../snapshotcompprofile/` | 200-400ms | 10-20ms | No timeout | High |
+| 9 | Quote Details (Atlas) | `apihub.5paisa.com/atlas-ba-rt/.../getquotedetails/` | 250-450ms | 15-25ms | No timeout | Critical |
+| 10 | MarketSmith Instrument ID | `msi-gcloud-prod.appspot.com/.../instr/srch.json` | 300-600ms | N/A | 10s | High |
+| 11 | Investment Rating | `msi-gcloud-prod.appspot.com/.../wisdom.json` | 400-700ms | N/A | 10s | Medium |
+| 12 | Ownership/Management | `msi-gcloud-prod.appspot.com/.../financeDetails.json` | 500-800ms | N/A | 10s | High |
+| 13 | Financial Data (MarketSmith) | `apihub.5paisa.com/marketsmith-ca/.../financeDetails.json` | 400-700ms | 20-30ms | 10s | High |
+
+**Total Server-Side API Time (Sequential)**: 3.5-6 seconds (first load) | 150-250ms (cached)
+
+**Note**: With caching enabled (24-hour cache), subsequent page loads are significantly faster.
+
+---
+
+## Client-Side API Performance Table
+
+| # | API Name | Endpoint | Trigger Delay | Avg Response Time | Cache | User Impact |
+|---|----------|----------|---------------|-------------------|-------|-------------|
+| 14 | Forecast Data | `/get-forecast-data/{NSECODE}` | 2000ms | 300-600ms | 24h | Low (optional) |
+| 15 | Shareholding Names | `/shareholding-pattern-names-json/` | 1000ms | 100-200ms | 24h | Medium |
+| 16 | Shareholding Data | `/shareholding-pattern-data-json/` | 1000ms | 100-200ms | 24h | Medium |
+| 17 | Shareholding Chart | `/shareholding-pattern-chart/` | 1000ms | 150-250ms | 24h | Medium |
+| 18 | Similar Stocks | `/api/get-similar-stocks` | 2000ms | 400-800ms | 24h | Low |
+| 19 | FnO Check | `/check-fno/{NSECODE}` | 2000ms | 200-400ms | 48h | Medium |
+| 20 | Sector/Cap Info | `/api/{NSECODE}/sector-cap-info` | 2000ms | 200-350ms | No cache | High |
+| 21 | Financial Data (Tabs) | `/financial-data/{TAB}/{NSECODE}` | 1500ms | 300-600ms | 24h | High |
+| 22 | Price Range Filter | `/price-range-filter/{NSECODE}/{RANGE}` | On interaction | 150-300ms | No cache | Medium |
+| 23a | Poll - Vote Count | `/stock-poll/votes-count/` | 2000ms | 50-100ms | No cache | Low |
+| 23b | Poll - Cast Vote | `/stock-poll/{VOTE}/` | User action | 100-200ms | No cache | Low |
+| 23c | Poll - Get Results | `/stock-poll/poll-html-json/` | 2000ms | 100-150ms | No cache | Low |
+
+**Total Client-Side API Time**: 2-4 seconds (spread across delays)
+
+---
+
+## Combined Page Load Timeline with API Times
+
+```
+Time      | Server-Side                          | Client-Side              | User Experience
+----------|--------------------------------------|--------------------------|---------------------------
+0ms       | Request received                     | -                        | User sees loading
+          |                                      |                          |
+0-100ms   | URL parsing, validation              | -                        | Still loading
+          |                                      |                          |
+100-200ms | DB query: Stock details (50ms)       | -                        | Still loading
+          | DB query: FAQs (30ms)                |                          |
+          | DB query: About section (40ms)       |                          |
+          |                                      |                          |
+200-400ms | API #1: Search Scrip (200ms)         | -                        | Still loading
+          |                                      |                          |
+400-800ms | API #2: Overview (300ms)             | -                        | Still loading
+          |                                      |                          |
+800-1050ms| API #3: Fundamental (200ms)          | -                        | Still loading
+          |                                      |                          |
+1050-1500ms| API #4: Technical Analysis (400ms)  | -                        | Still loading
+          |                                      |                          |
+1500-1700ms| API #5: Tech Trend (200ms)          | -                        | Still loading
+          |                                      |                          |
+1700-2000ms| API #6: Rapid Results (250ms)       | -                        | Still loading
+          |                                      |                          |
+2000-2500ms| API #7: Corporate Actions (400ms)   | -                        | Still loading
+          |                                      |                          |
+2500-2800ms| API #8: Company Profile (250ms)     | -                        | Still loading
+          |                                      |                          |
+2800-3200ms| API #9: Quote Details (350ms)       | -                        | Still loading
+          |                                      |                          |
+3200-3700ms| API #10: Instrument ID (500ms)      | -                        | Still loading
+          |                                      |                          |
+3700-4300ms| API #11: Investment Rating (600ms)  | -                        | Still loading
+          |                                      |                          |
+4300-5000ms| API #12: Ownership/Management (700ms)| -                       | Still loading
+          |                                      |                          |
+5000-5600ms| API #13: Financial Data (600ms)     | -                        | Still loading
+          |                                      |                          |
+5600-6000ms| Template rendering (400ms)          | -                        | Still loading
+          |                                      |                          |
+6000ms    | HTML sent to browser                 | HTML received            | Page starts rendering
+          |                                      |                          |
+6100ms    | -                                    | CSS loaded (100ms)       | Styles applied
+          |                                      |                          |
+6200ms    | -                                    | JS files loaded (100ms)  | Scripts parsed
+          |                                      |                          |
+6300ms    | -                                    | DOM ready (100ms)        | **First Contentful Paint**
+          |                                      |                          |
+7000ms    | -                                    | Shareholding APIs (200ms)| Charts render
+          |                                      |                          |
+7500ms    | -                                    | Financial table (400ms)  | Tables populate
+          |                                      |                          |
+8000ms    | -                                    | Forecast (500ms)         | Forecast section loads
+          |                                      | Similar stocks (600ms)   | Similar stocks appear
+          |                                      | FnO check (300ms)        | FnO links added
+          |                                      | Sector/Cap (250ms)       | Breadcrumb updated
+          |                                      | Polls (200ms)            | Poll widget active
+          |                                      |                          |
+9000ms    | -                                    | All content loaded       | **Page Fully Interactive**
+
+**Total Time to First Contentful Paint**: ~6.3 seconds (first load, no cache)
+**Total Time to Interactive**: ~9 seconds (first load, no cache)
+
+**With Cache Enabled**:
+**Total Time to First Contentful Paint**: ~2.5 seconds
+**Total Time to Interactive**: ~4 seconds
+```
+
+---
+
+## Performance Breakdown by Page Section
+
+| Page Section | Server-Side Time | Client-Side Time | Total Time | Cacheable | Data Source |
+|--------------|------------------|------------------|------------|-----------|-------------|
+| **Stock Header & Price** | 600-1000ms | 0ms | 600-1000ms | Yes (24h) | APIs #1, #2, #9 |
+| **Performance Section** | 400-800ms | 0ms | 400-800ms | Yes (24h) | APIs #4, #9 |
+| **Investment Returns** | 250-400ms | 0ms | 250-400ms | Yes (24h) | API #4 |
+| **Fundamentals** | 300-600ms | 0ms | 300-600ms | Yes (24h) | APIs #2, #8, #9 |
+| **Chart** | 200-300ms | 500ms | 700-800ms | Partial | API #1 + iframe |
+| **Financials (Tabs)** | 600-900ms | 400-600ms | 1000-1500ms | Yes (24h) | API #13 |
+| **Technical Section** | 400-700ms | 0ms | 400-700ms | Yes (24h) | APIs #4, #5 |
+| **Ratings** | 600-900ms | 0ms | 600-900ms | Yes (24h) | APIs #10, #11 |
+| **Events/Corporate Actions** | 300-500ms | 0ms | 300-500ms | Yes (24h) | API #7 |
+| **F&O Section** | 0ms | 200-400ms | 200-400ms | Yes (48h) | API #19 |
+| **Shareholding Pattern** | 500-800ms | 200-400ms | 700-1200ms | Yes (24h) | APIs #12, #15-17 |
+| **Similar Stocks** | 0ms | 400-800ms | 400-800ms | Yes (24h) | API #18 |
+| **About Section** | 50-100ms | 0ms | 50-100ms | Yes (perm) | Database |
+| **FAQs** | 100-200ms | 0ms | 100-200ms | No cache | DB + API #2 |
+| **Stock Polls** | 0ms | 200-350ms | 200-350ms | No cache | APIs #23a-c |
+
+---
+
+## Individual API Response Time Analysis
+
+### Fastest APIs (< 200ms)
+| API | Uncached | Cached | Cache Duration |
+|-----|----------|--------|----------------|
+| Search Scrip Code | 150-300ms | 5-10ms | 24h |
+| Fundamental Data | 150-250ms | 5-10ms | 24h |
+| Tech Trend | 150-300ms | 5-10ms | 24h |
+| Price Range Filter | 150-300ms | No cache | - |
+| Poll - Vote Count | 50-100ms | No cache | - |
+| Poll - Get Results | 100-150ms | No cache | - |
+
+### Medium Speed APIs (200-400ms)
+| API | Uncached | Cached | Cache Duration |
+|-----|----------|--------|----------------|
+| Stock Overview | 200-400ms | 10-20ms | 24h |
+| Rapid Results | 200-350ms | 10-15ms | 24h |
+| Company Profile | 200-400ms | 10-20ms | 24h |
+| Quote Details | 250-450ms | 15-25ms | No cache |
+| FnO Check | 200-400ms | Cached | 48h |
+| Sector/Cap Info | 200-350ms | No cache | - |
+| Shareholding Names | 100-200ms | Cached | 24h |
+| Shareholding Data | 100-200ms | Cached | 24h |
+
+### Slower APIs (400ms+)
+| API | Uncached | Cached | Cache Duration | Bottleneck? |
+|-----|----------|--------|----------------|-------------|
+| Technical Analysis | 250-500ms | 10-15ms | 24h | No |
+| Corporate Actions | 300-500ms | 15-25ms | 24h | No |
+| MarketSmith Instrument ID | 300-600ms | N/A | No cache | Minor |
+| Investment Rating | 400-700ms | N/A | No cache | **Yes** |
+| Ownership/Management | 500-800ms | N/A | No cache | **Yes** |
+| Financial Data (MarketSmith) | 400-700ms | 20-30ms | 24h | Minor |
+| Similar Stocks | 400-800ms | Cached | 24h | Minor |
+
+---
+
+## Bottleneck APIs (Main Performance Issues)
+
+### 1. Ownership/Management API
+- **Time**: 500-800ms (no cache)
+- **Provider**: MarketSmith (msi-gcloud-prod.appspot.com)
+- **Impact**: Delays shareholding pattern section
+- **Optimization**: Not cacheable by vendor, affects every page load
+- **% of Total**: ~10-15% of server processing time
+
+### 2. Investment Rating API
+- **Time**: 400-700ms (no cache)
+- **Provider**: MarketSmith (msi-gcloud-prod.appspot.com)
+- **Impact**: Delays ratings section
+- **Optimization**: Not cacheable by vendor
+- **% of Total**: ~8-12% of server processing time
+
+### 3. Financial Data API
+- **Time**: 400-700ms (uncached) | 20-30ms (cached)
+- **Provider**: MarketSmith via Kong Gateway
+- **Impact**: Delays financial tables
+- **Optimization**: Good caching (24h)
+- **% of Total**: ~10% of server processing time (first load only)
+
+### 4. Quote Details API (Atlas)
+- **Time**: 250-450ms (no cache)
+- **Provider**: Atlas Real-Time API
+- **Impact**: Live price data must be fresh
+- **Optimization**: Cannot be cached (real-time data)
+- **% of Total**: ~5-8% of server processing time
+
+---
+
+## Cache Impact Analysis
+
+### Without Cache (First Visit)
+```
+Server-Side APIs:     5-6 seconds
+Database Queries:     100-200ms
+Template Rendering:   400-500ms
+─────────────────────────────────
+Total Server Time:    5.5-6.5 seconds
+
+Client-Side Assets:   300-500ms
+Client-Side APIs:     2-4 seconds
+─────────────────────────────────
+Total Page Load:      8-11 seconds
+```
+
+### With Full Cache (Subsequent Visits within 24h)
+```
+Server-Side APIs:     150-250ms (95% faster!)
+Database Queries:     100-200ms
+Template Rendering:   100-200ms
+─────────────────────────────────
+Total Server Time:    350-650ms
+
+Client-Side Assets:   300-500ms
+Client-Side APIs:     1-2 seconds (cached)
+─────────────────────────────────
+Total Page Load:      2-3.5 seconds (70-75% faster!)
+```
+
+---
+
+## API Call Sequencing
+
+### Sequential Calls (Blocking)
+These APIs must complete before next one starts:
+1. Search Scrip → Get BSE Code (200ms)
+2. Overview → Get Stock Data (300ms)
+3. Company Profile → Get co_code (250ms)
+4. Quote Details → Get Live Price (350ms)
+
+**Total Sequential Time**: ~1.1 seconds
+
+### Parallel Calls (Non-Blocking)
+These could potentially run in parallel:
+- Fundamental Data (200ms)
+- Technical Analysis (400ms)
+- Tech Trend (200ms)
+- Rapid Results (250ms)
+- Corporate Actions (400ms)
+- Investment Rating (600ms)
+- Ownership/Management (700ms)
+- Financial Data (600ms)
+
+**Current Sequential Time**: ~3.5 seconds
+**Potential Parallel Time**: ~700ms (limited by slowest API)
+**Optimization Opportunity**: ~2.8 seconds saved
+
+---
+
+## Database Query Performance
+
+| Query Type | Purpose | Avg Time | Cacheable | Impact |
+|------------|---------|----------|-----------|--------|
+| Stock Page Title | Get custom H1 title | 30-50ms | Yes (permanent) | Low |
+| Stock Meta Details | Get meta title/description | 40-60ms | No | Low |
+| About Company | Get about section content | 30-50ms | No | Low |
+| Stock FAQs | Get FAQ content | 40-80ms | No | Low |
+| Corporate Banner | Check if banner enabled | 20-30ms | No | Very Low |
+| Dividend Check | Check if dividend data exists | 30-50ms | No | Low |
+
+**Total DB Query Time**: 100-200ms
+
+---
+

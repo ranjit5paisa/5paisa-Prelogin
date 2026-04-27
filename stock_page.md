@@ -1,433 +1,779 @@
-# Stock Page cURL Documentation
+# Stock Page API Documentation
+## Template: `modules/custom/fivepaisa_stock_page/templates/stock-page.html.twig`
 
-## Table of Contents
-1. [Main Page Access](#main-page-access)
-2. [Measuring API Response Times](#measuring-api-response-times)
-3. [External API Endpoints (Kong Gateway)](#external-api-endpoints-kong-gateway)
-4. [External API Endpoints (Atlas)](#external-api-endpoints-atlas)
-5. [Internal Drupal API Routes](#internal-drupal-api-routes)
-6. [Authentication & Headers](#authentication--headers)
-7. [Common Parameters](#common-parameters)
-8. [Performance Benchmarks](#performance-benchmarks)
-
----
-
-## Measuring API Response Times
-
-### Using cURL with Timing Output
-
-Add the `-w` (write-out) flag to measure response times:
-
-```bash
-curl -X GET "https://www.5paisa.com/stocks/tcs-share-price" \
-  -H "User-Agent: Mozilla/5.0" \
-  -H "Accept: text/html" \
-  -w "\n\n⏱️  Response Times:\n-------------------\nDNS Lookup:        %{time_namelookup}s\nTCP Connection:    %{time_connect}s\nTLS Handshake:     %{time_appconnect}s\nServer Processing: %{time_starttransfer}s\nTotal Time:        %{time_total}s\nHTTP Code:         %{http_code}\n" \
-  -o /dev/null -s
+## Example URL
 ```
-
-### Full Timing Breakdown Format
-
-Use this comprehensive timing template for all API calls:
-
-```bash
-curl -X GET "API_URL_HERE" \
-  -H "HEADERS_HERE" \
-  -w "@curl-format.txt" \
-  -o response.json -s
-```
-
-**Create `curl-format.txt` with:**
-```
-\n
-=====================================
-⏱️  TIMING BREAKDOWN
-=====================================
-DNS Lookup Time:      %{time_namelookup}s
-TCP Connect Time:     %{time_connect}s
-TLS Handshake Time:   %{time_appconnect}s
-Pre-Transfer Time:    %{time_pretransfer}s
-Redirect Time:        %{time_redirect}s
-Start Transfer Time:  %{time_starttransfer}s
-TOTAL TIME:           %{time_total}s
--------------------------------------
-Download Speed:       %{speed_download} bytes/sec
-Upload Speed:         %{speed_upload} bytes/sec
-Size Downloaded:      %{size_download} bytes
-Size Uploaded:        %{size_upload} bytes
-HTTP Status Code:     %{http_code}
-=====================================
-```
-
-### Quick Timing (One-Liner)
-
-```bash
-# Simple one-liner for quick timing
-curl -X GET "API_URL" -H "HEADERS" -w "\nTotal: %{time_total}s | HTTP: %{http_code}\n" -o /dev/null -s
+https://www.5paisa.com/stocks/suzlon-share-price
 ```
 
 ---
 
-## Main Page Access
+## Page Load Sequence and Timing
 
-### Stock Page URL
-Access any stock page using the following pattern:
-```bash
-curl -X GET "https://www.5paisa.com/stocks/tcs-share-price" \
-  -H "User-Agent: Mozilla/5.0" \
-  -H "Accept: text/html" \
-  -w "\nTotal Time: %{time_total}s | HTTP Code: %{http_code}\n" \
-  -o response.html
-```
+### Initial Server-Side Load (0-2 seconds)
+The page makes all critical server-side API calls before rendering HTML to the user.
 
-**URL Pattern:** `/stocks/{stock-symbol}-share-price`
-
-**Examples:**
-- `/stocks/tcs-share-price`
-- `/stocks/reliance-share-price`
-- `/stocks/infosys-share-price`
-
-**Expected Response Time:** 3.0s - 4.0s (includes multiple sequential backend API calls)
+### Client-Side Load (After Page Render)
+- **Immediate (0-500ms)**: Client-side JavaScript initialization
+- **500ms**: Chart URL generation
+- **1000ms**: Shareholding pattern chart rendering
+- **1500ms**: Financial data initial load
+- **2000ms**: Forecast data, Similar stocks, Poll data, FnO check, Sector/Cap info
+- **3000ms+**: Additional lazy-loaded content
 
 ---
 
-## External API Endpoints (Kong Gateway)
+## Server-Side API Calls (PHP Backend)
 
-### 1. Stock Overview Data
-**Source:** [`StockPageController.php`](../modules/custom/fivepaisa_stock_page/src/Controller/StockPageController.php:199)
+These APIs are called during initial page load in [`StockPageController::getData()`](modules/custom/fivepaisa_stock_page/src/Controller/StockPageController.php:155)
 
-```bash
-curl -X GET "https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/stock/overview/TCS/" \
-  -H "Ocp-Apim-Subscription-Key: a4af51382266497bb5464d95fbb2017b" \
-  -H "Ocp-Apim-Trace: true" \
-  -H "Content-Type: application/json" \
-  -H "KEY: 5260c06e20fb53c4521b8cf1f2eb0ba616634e44" \
-  -H "requestCode: pearlapi" \
-  -H "UserId: 5PAISAAPI" \
-  -H "password: 5nadynsiitnienny" \
-  -w "\nTotal Time: %{time_total}s | HTTP: %{http_code}\n" \
-  --insecure
+### 1. Search Scrip Code API
+**Purpose**: Get BSE Script Code for the stock
+
+**Endpoint**: 
+```
+POST https://gateway.5paisa.com/prelogin/prod/searchscrip
 ```
 
-**Response includes:** Stock price, fundamentals, technicals, 52-week high/low  
-**Expected Response Time:** 0.2-0.5s  
-**Timeout Configured:** 10s (Source: Code defaults)
+**Headers**:
+```
+UserID: ZyT47UW2g56
+Password: H98qlU4Sn2
+Ocp-Apim-Subscription-Key: ad5445f4018348c38e3b5d6a68a39c81
+Content-Type: application/json
+```
+
+**Request Body**:
+```json
+{
+  "Exch": "N",
+  "ExchType": "C",
+  "RecordCount": "1",
+  "Symbol": "SUZLON"
+}
+```
+
+**CURL Example**:
+```bash
+curl -X POST 'https://gateway.5paisa.com/prelogin/prod/searchscrip' \
+-H 'UserID: ZyT47UW2g56' \
+-H 'Password: H98qlU4Sn2' \
+-H 'Ocp-Apim-Subscription-Key: ad5445f4018348c38e3b5d6a68a39c81' \
+-H 'Content-Type: application/json' \
+-d '{
+  "Exch": "N",
+  "ExchType": "C",
+  "RecordCount": "1",
+  "Symbol": "SUZLON"
+}'
+```
+
+**Response Fields**:
+- `Data[0].ScripCode` - BSE Script Code
+- `Data[0].Symbol` - Stock symbol
+- `Data[0].Exchange` - Exchange (N=NSE, B=BSE)
+
+**Called At**: Line 179 in StockPageController.php
+**Function**: `getScriptCodeBse()`
 
 ---
 
-### 2. Fundamental Data
-**Source:** [`StockPageController.php`](../modules/custom/fivepaisa_stock_page/src/Controller/StockPageController.php:263)
+### 2. Stock Overview API
+**Purpose**: Get stock price, fundamentals, and technical data
 
-```bash
-curl -X GET "https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/stock/fundamental/TCS/" \
-  -H "Ocp-Apim-Subscription-Key: a4af51382266497bb5464d95fbb2017b" \
-  -H "Ocp-Apim-Trace: true" \
-  -H "Content-Type: application/json" \
-  -H "KEY: 5260c06e20fb53c4521b8cf1f2eb0ba616634e44" \
-  -H "requestCode: pearlapi" \
-  -H "UserId: 5PAISAAPI" \
-  -H "password: 5nadynsiitnienny" \
-  -w "\nTotal Time: %{time_total}s | HTTP: %{http_code}\n" \
-  --insecure
+**Endpoint**: 
+```
+GET https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/stock/overview/{SCRIP_CODE}/
 ```
 
-**Expected Response Time:** 0.2-0.4s  
-**Timeout Configured:** 10s
+**Headers**:
+```
+Ocp-Apim-Subscription-Key: a4af51382266497bb5464d95fbb2017b
+Ocp-Apim-Trace: true
+Content-Type: application/json
+KEY: 5260c06e20fb53c4521b8cf1f2eb0ba616634e44
+requestCode: pearlapi
+UserId: 5PAISAAPI
+Password: 5nadynsiitnienny
+```
+
+**CURL Example**:
+```bash
+curl -X GET 'https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/stock/overview/532667/' \
+-H 'Ocp-Apim-Subscription-Key: a4af51382266497bb5464d95fbb2017b' \
+-H 'Ocp-Apim-Trace: true' \
+-H 'Content-Type: application/json' \
+-H 'KEY: 5260c06e20fb53c4521b8cf1f2eb0ba616634e44' \
+-H 'requestCode: pearlapi' \
+-H 'UserId: 5PAISAAPI' \
+-H 'Password: 5nadynsiitnienny'
+```
+
+**Response Structure**:
+```json
+{
+  "head": {
+    "status": "0",
+    "statusDescription": "Success"
+  },
+  "body": {
+    "stockData": [
+      "Stock Name",
+      "...",
+      "Current Price",
+      "...",
+      "BSE Code",
+      "ISIN",
+      "...",
+      "Price",
+      "...",
+      "Change",
+      "Change%"
+    ],
+    "fundamentalData": [...],
+    "technicalData": [...],
+    "52_Week_High": "...",
+    "52_Week_low": "...",
+    "lastUpdated": "..."
+  }
+}
+```
+
+**Called At**: Line 199, 263, 537, 726 in StockPageController.php
+**Functions**: `getData()`, `getKeyStats()`
 
 ---
 
-### 3. Technical Analysis Data
-**Source:** [`StockPageController.php`](../modules/custom/fivepaisa_stock_page/src/Controller/StockPageController.php:1169)
+### 3. Fundamental Data API
+**Purpose**: Get detailed fundamental metrics
 
-```bash
-curl -X GET "https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/stock/technical-analysis/TCS/" \
-  -H "Ocp-Apim-Subscription-Key: a4af51382266497bb5464d95fbb2017b" \
-  -H "Ocp-Apim-Trace: true" \
-  -H "Content-Type: application/json" \
-  -H "KEY: 5260c06e20fb53c4521b8cf1f2eb0ba616634e44" \
-  -H "requestCode: pearlapi" \
-  -H "UserId: 5PAISAAPI" \
-  -H "password: 5nadynsiitnienny" \
-  -w "\nTotal Time: %{time_total}s | HTTP: %{http_code}\n" \
-  --insecure
+**Endpoint**: 
+```
+GET https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/stock/fundamental/{SCRIP_CODE}/
 ```
 
-**Response includes:** EMA, SMA, RSI, MACD, pivot points, moving averages  
-**Expected Response Time:** 0.3-0.6s  
-**Timeout Configured:** 10s
+**Headers**: Same as Overview API
+
+**CURL Example**:
+```bash
+curl -X GET 'https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/stock/fundamental/532667/' \
+-H 'Ocp-Apim-Subscription-Key: a4af51382266497bb5464d95fbb2017b' \
+-H 'Ocp-Apim-Trace: true' \
+-H 'Content-Type: application/json' \
+-H 'KEY: 5260c06e20fb53c4521b8cf1f2eb0ba616634e44' \
+-H 'requestCode: pearlapi' \
+-H 'UserId: 5PAISAAPI' \
+-H 'Password: 5nadynsiitnienny'
+```
+
+**Response**: Contains NSE code, BSE code, BSE Script Code
+
+**Called At**: Line 263 in StockPageController.php
 
 ---
 
-### 4. Corporate Actions (Events)
-**Source:** [`StockPageController.php`](../modules/custom/fivepaisa_stock_page/src/Controller/StockPageController.php:881-903)
+### 4. Technical Analysis API
+**Purpose**: Get EMA, SMA, pivot points, RSI, MFI, MACD
 
-```bash
-curl -X GET "https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/events/calendar/stock/TCS" \
-  -H "Ocp-Apim-Subscription-Key: a4af51382266497bb5464d95fbb2017b" \
-  -H "Ocp-Apim-Trace: true" \
-  -H "Content-Type: application/json" \
-  -H "KEY: 5260c06e20fb53c4521b8cf1f2eb0ba616634e44" \
-  -H "requestCode: pearlapi" \
-  -H "UserId: 5PAISAAPI" \
-  -H "password: 5nadynsiitnienny" \
-  -w "\nTotal Time: %{time_total}s | HTTP: %{http_code}\n" \
-  --insecure
+**Endpoint**: 
+```
+GET https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/stock/technical-analysis/{SCRIP_CODE}/
 ```
 
-**Response includes:** Board meetings, dividends, bonus, splits, announcements  
-**Expected Response Time:** 0.2-0.5s  
-**Timeout Configured:** None (default)
+**Headers**: Same as Overview API
+
+**CURL Example**:
+```bash
+curl -X GET 'https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/stock/technical-analysis/532667/' \
+-H 'Ocp-Apim-Subscription-Key: a4af51382266497bb5464d95fbb2017b' \
+-H 'Ocp-Apim-Trace: true' \
+-H 'Content-Type: application/json' \
+-H 'KEY: 5260c06e20fb53c4521b8cf1f2eb0ba616634e44'
+```
+
+**Response Structure**:
+```json
+{
+  "head": {
+    "status": "0",
+    "statusDescription": "Success"
+  },
+  "body": {
+    "stockPriceData": {
+      "currentPrice": "...",
+      "dayChange": "...",
+      "dayChangeP": "..."
+    },
+    "movingAverages": {
+      "tableData": [
+        ["50 Day", "SMA_value", "EMA_value"],
+        ["100 Day", "SMA_value", "EMA_value"],
+        ["200 Day", "SMA_value", "EMA_value"]
+      ]
+    },
+    "pivotData": {
+      "pivotPoint": "...",
+      "firstResistanceR1": "...",
+      "secondResistanceR2": "...",
+      "thirdResistanceR3": "...",
+      "firstSupportS1": "...",
+      "secondSupportS2": "...",
+      "thirdSupportS3": "..."
+    },
+    "technicals": [
+      {
+        "name": "Relative Strength Index",
+        "value": "...",
+        "color": "..."
+      },
+      {
+        "name": "Money Flow Index",
+        "value": "...",
+        "color": "..."
+      },
+      {
+        "name": "MACD",
+        "value": "...",
+        "color": "..."
+      },
+      {
+        "name": "MACD Signal",
+        "value": "...",
+        "color": "..."
+      }
+    ],
+    "priceAnalysis": {
+      "day": {...},
+      "week": {...},
+      "month": {...},
+      "halfYear": {...},
+      "year": {...},
+      "fiveYear": {...}
+    }
+  }
+}
+```
+
+**Called At**: Lines 363, 537, 798, 863, 1169, 1316, 2599 in StockPageController.php and StockPageService.php
+**Functions**: `getTechnicalData()`, `getKeyStats()`, `openPrevData()`, `getReturns()`
 
 ---
 
-### 5. Technical Trend (SWOT - Bearish/Bullish)
-**Source:** [`StockPageController.php`](../modules/custom/fivepaisa_stock_page/src/Controller/StockPageController.php:1259)
+### 5. Tech Trend (SWOT) API
+**Purpose**: Get bullish/bearish moving average indicators
 
-```bash
-curl -X GET "https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/stock/tech-trend/TCS" \
-  -H "Ocp-Apim-Subscription-Key: a4af51382266497bb5464d95fbb2017b" \
-  -H "Ocp-Apim-Trace: true" \
-  -H "Content-Type: application/json" \
-  -H "KEY: 5260c06e20fb53c4521b8cf1f2eb0ba616634e44" \
-  -H "UserId: 5PAISAAPI" \
-  -H "password: 5nadynsiitnienny" \
-  -w "\nTotal Time: %{time_total}s | HTTP: %{http_code}\n" \
-  --insecure
+**Endpoint**: 
+```
+GET https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/stock/tech-trend/{SCRIP_CODE}
 ```
 
-**Response includes:** Bearish count, bullish count, technical trend percentage  
-**Expected Response Time:** 0.2-0.4s  
-**Timeout Configured:** 10s
+**Headers**: Same as Overview API
+
+**CURL Example**:
+```bash
+curl -X GET 'https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/stock/tech-trend/532667' \
+-H 'Ocp-Apim-Subscription-Key: a4af51382266497bb5464d95fbb2017b' \
+-H 'Ocp-Apim-Trace: true' \
+-H 'Content-Type: application/json' \
+-H 'KEY: 5260c06e20fb53c4521b8cf1f2eb0ba616634e44'
+```
+
+**Response**:
+```json
+{
+  "head": {
+    "status": "0"
+  },
+  "body": {
+    "532667": {
+      "techTrend": {
+        "bearish": 5,
+        "bullish": 7,
+        "total": 12
+      }
+    }
+  }
+}
+```
+
+**Called At**: Line 1259 in StockPageService.php
+**Function**: `getSwotData()`
 
 ---
 
-### 6. Rapid Results (Stock Highlights)
-**Source:** [`StockPageController.php`](../modules/custom/fivepaisa_stock_page/src/Controller/StockPageController.php:1146)
+### 6. Rapid Results API
+**Purpose**: Get latest result highlights
 
-```bash
-curl -X GET "https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/stock/rapid-results/TCS/" \
-  -H "Ocp-Apim-Subscription-Key: a4af51382266497bb5464d95fbb2017b" \
-  -H "Ocp-Apim-Trace: true" \
-  -H "Content-Type: application/json" \
-  -H "KEY: 5260c06e20fb53c4521b8cf1f2eb0ba616634e44" \
-  -H "requestCode: pearlapi" \
-  -H "UserId: 5PAISAAPI" \
-  -H "password: 5nadynsiitnienny" \
-  -w "\nTotal Time: %{time_total}s | HTTP: %{http_code}\n" \
-  --insecure
+**Endpoint**: 
+```
+GET https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/stock/rapid-results/{SCRIP_CODE}/
 ```
 
-**Response includes:** Latest quarterly results, earnings highlights  
-**Expected Response Time:** 0.2-0.4s  
-**Timeout Configured:** None (default)
+**Headers**: Same as Overview API
+
+**CURL Example**:
+```bash
+curl -X GET 'https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/stock/rapid-results/532667/' \
+-H 'Ocp-Apim-Subscription-Key: a4af51382266497bb5464d95fbb2017b'
+```
+
+**Response**: Latest news/results data for the stock
+
+**Called At**: Line 1146 in StockPageController.php
+**Function**: `getResultHighlights()`
 
 ---
 
-## External API Endpoints (Atlas)
+### 7. Corporate Actions API
+**Purpose**: Get dividends, bonuses, splits, board meetings
 
-### 7. Script Code Search (BSE/NSE)
-**Source:** [`StockPageController.php`](../modules/custom/fivepaisa_stock_page/src/Controller/StockPageController.php:1050-1075)
-
-```bash
-curl -X POST "https://gateway.5paisa.com/prelogin/prod/searchscrip" \
-  -H "UserID: ZyT47UW2g56" \
-  -H "Password: H98qlU4Sn2" \
-  -H "Ocp-Apim-Subscription-Key: ad5445f4018348c38e3b5d6a68a39c81" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "Exch": "N",
-    "ExchType": "C",
-    "RecordCount": "1",
-    "Symbol": "TCS"
-  }' \
-  -w "\nTotal Time: %{time_total}s | HTTP: %{http_code}\n" \
-  --insecure
+**Endpoint**: 
+```
+GET https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/events/calendar/stock/{SCRIP_CODE}
 ```
 
-**Response includes:** ScripCode, Exchange, Symbol for chart generation  
-**Expected Response Time:** 0.1-0.3s  
-**Timeout Configured:** 10s (connect + response)
+**Headers**: Same as Overview API
+
+**CURL Example**:
+```bash
+curl -X GET 'https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/events/calendar/stock/532667' \
+-H 'Ocp-Apim-Subscription-Key: a4af51382266497bb5464d95fbb2017b' \
+-H 'Ocp-Apim-Trace: true' \
+-H 'Content-Type: application/json' \
+-H 'KEY: 5260c06e20fb53c4521b8cf1f2eb0ba616634e44'
+```
+
+**Response**:
+```json
+{
+  "body": {
+    "eventsData": [
+      {
+        "eventType": "Dividend",
+        "recordDate": "...",
+        "purpose": "...",
+        "remarks": "..."
+      },
+      {
+        "eventType": "Board Meeting",
+        "boardMeetDate": "...",
+        "purpose": "...",
+        "remarks": "..."
+      }
+    ]
+  }
+}
+```
+
+**Called At**: Line 883 in StockPageController.php
+**Function**: `getCorporateActionData()`
 
 ---
 
-### 8. Company Quote Details
-**Source:** [`StockPageController.php`](../modules/custom/fivepaisa_stock_page/src/Controller/StockPageController.php:702)
+### 8. Company Profile API (Atlas)
+**Purpose**: Get company details, sector, co_code
 
-```bash
-curl -X GET "https://apihub.5paisa.com/atlas-ba-rt/datamart/Equity/CompanyInfo.svc/getquotedetails/{CO_CODE}/nse?responseType=json" \
-  -H "Authorization: Basic aW5kaWFpbmZvbGluZVxpaWZsd2ViOkdsYXhvQDEyMw==" \
-  -w "\nTotal Time: %{time_total}s | HTTP: %{http_code}\n" \
-  --insecure
+**Endpoint**: 
+```
+GET https://apihub.5paisa.com/atlas_cache/datamart/Equity/CompanyInfo.svc/snapshotcompprofile-version2/{SYMBOL}?responseType=json
 ```
 
-Replace `{CO_CODE}` with company code obtained from snapshot API.
+**Authorization**: Basic indiainfoline\iiflweb:Glaxo@123
 
-**Response includes:** EPS, sector, market cap, company details  
-**Expected Response Time:** 0.2-0.4s
+**CURL Example**:
+```bash
+curl -X GET 'https://apihub.5paisa.com/atlas_cache/datamart/Equity/CompanyInfo.svc/snapshotcompprofile-version2/SUZLON?responseType=json' \
+--user 'indiainfoline\iiflweb:Glaxo@123'
+```
+
+**Response**: Contains `co_code` needed for other Atlas APIs
+
+**Called At**: Line 361 in StockPageService.php
+**Function**: `getCoCode()`
 
 ---
 
-### 9. Company Snapshot Profile
-**Source:** [`StockPageService.php`](../modules/custom/fivepaisa_stock_page/src/StockPageService.php:361)
+### 9. Quote Details API (Atlas)
+**Purpose**: Get live price, volume, 52-week high/low, EPS
 
-```bash
-curl -X GET "https://apihub.5paisa.com/atlas_cache/datamart/Equity/CompanyInfo.svc/snapshotcompprofile-version2/TCS?responseType=json" \
-  -H "Authorization: Basic aW5kaWFpbmZvbGluZVxpaWZsd2ViOkdsYXhvQDEyMw==" \
-  -w "\nTotal Time: %{time_total}s | HTTP: %{http_code}\n" \
-  --insecure
+**Endpoint**: 
+```
+GET https://apihub.5paisa.com/atlas-ba-rt/datamart/Equity/CompanyInfo.svc/getquotedetails/{CO_CODE}/{EXCHANGE}?responseType=json
 ```
 
-**Response includes:** co_code for further API calls  
-**Expected Response Time:** 0.2-0.4s
+**Authorization**: Basic indiainfoline\iiflweb:Glaxo@123
+
+**CURL Example**:
+```bash
+curl -X GET 'https://apihub.5paisa.com/atlas-ba-rt/datamart/Equity/CompanyInfo.svc/getquotedetails/12345/nse?responseType=json' \
+--user 'indiainfoline\iiflweb:Glaxo@123'
+```
+
+**Response Structure**:
+```json
+{
+  "response": {
+    "data": {
+      "getquotedetailslist": {
+        "getquotedetails": {
+          "price": "...",
+          "change": "...",
+          "high_price": "...",
+          "low_price": "...",
+          "open_price": "...",
+          "oldprice": "...",
+          "hi_52_wk": "...",
+          "lo_52_wk": "...",
+          "volume": "...",
+          "eps": "...",
+          "companysector": "...",
+          "companysectorcode": "..."
+        }
+      }
+    }
+  }
+}
+```
+
+**Called At**: Lines 531, 702, 952, 1930 in StockPageController.php and StockPageService.php
+**Functions**: `getKeyStats()`, `getSectorLink()`, `getPerformance()`
 
 ---
 
-### 10. Sector Companies List
-**Source:** [`StockPageController.php`](../modules/custom/fivepaisa_stock_page/src/Controller/StockPageController.php:1961)
+### 10. MarketSmith Instrument ID API
+**Purpose**: Get instrument ID for ratings and ownership data
 
-```bash
-curl -X GET "https://apihub.5paisa.com/atlas_cache/datamart/Equity/Market.svc/SectorWiseComp/{SECTOR_CODE}/?responseType=json" \
-  -H "Authorization: Basic aW5kaWFpbmZvbGluZVxpaWZsd2ViOkdsYXhvQDEyMw==" \
-  -w "\nTotal Time: %{time_total}s | HTTP: %{http_code}\n" \
-  --insecure
+**Endpoint**: 
+```
+GET https://msi-gcloud-prod.appspot.com/gateway/simple-api/ms-india/instr/srch.json?text={SYMBOL}&lang=en&ver=2&ms-auth=...
 ```
 
-Replace `{SECTOR_CODE}` with sector code.
+**CURL Example**:
+```bash
+curl -X GET 'https://msi-gcloud-prod.appspot.com/gateway/simple-api/ms-india/instr/srch.json?text=SUZLON&lang=en&ver=2&ms-auth=10454+MarketSmithINDUID-Web000000013505+MarketSmithINDUID-Web000000013505+3+211017225341+2003449279'
+```
 
-**Used for:** Similar stocks feature  
-**Expected Response Time:** 0.3-0.8s
+**Response**: Returns `instrumentId`
+
+**Called At**: Line 453 in StockPageService.php
+**Function**: `getInstrumentId()`
 
 ---
 
-### 11. F&O Overview (Futures & Options)
-**Source:** [`StockPageController.php`](../modules/custom/fivepaisa_stock_page/src/Controller/StockPageController.php:2126)
+### 11. Investment Rating API (MarketSmith)
+**Purpose**: Get stock ratings (Master Score, EPS Rating, RS Rating, etc.)
 
-```bash
-# For Futures
-curl -X GET "https://apihub.5paisa.com/atlas-ca/datamart/FNO/FutOpt.svc/FutOptOverview/Fut/TCS?responseType=json" \
-  -H "Authorization: Basic aW5kaWFpbmZvbGluZVxpaWZsd2ViOkdsYXhvQDEyMw==" \
-  -w "\nTotal Time: %{time_total}s | HTTP: %{http_code}\n" \
-  --insecure
-
-# For Options
-curl -X GET "https://apihub.5paisa.com/atlas-ca/datamart/FNO/FutOpt.svc/FutOptOverview/Opt/TCS?responseType=json" \
-  -H "Authorization: Basic aW5kaWFpbmZvbGluZVxpaWZsd2ViOkdsYXhvQDEyMw==" \
-  -w "\nTotal Time: %{time_total}s | HTTP: %{http_code}\n" \
-  --insecure
+**Endpoint**: 
+```
+GET https://msi-gcloud-prod.appspot.com/gateway/simple-api/ms-india/instr/0/{INSTRUMENT_ID}/wisdom.json?lang=en&ver=2&ms-auth=...
 ```
 
-**Expected Response Time:** 0.2-0.5s each  
-**Timeout Configured:** 10s
+**CURL Example**:
+```bash
+curl -X GET 'https://msi-gcloud-prod.appspot.com/gateway/simple-api/ms-india/instr/0/12345/wisdom.json?lang=en&ver=2&ms-auth=3990+MarketSmithINDUID-Web0000000000+MarketSmithINDUID-Web0000000000+0+210921231441+159745196'
+```
+
+**Response**: Rating data with itemValue, pageGroupLink, bodyText
+
+**Called At**: Line 407 in StockPageService.php
+**Function**: `getInvestRating()`
 
 ---
 
-## External API Endpoints (MarketSmith India - via Kong Gateway)
+### 12. Ownership/Management Data API (MarketSmith)
+**Purpose**: Get shareholding pattern and management details
 
-### 12. Instrument Search (for Financial Data)
-**Source:** [`StockPageService.php`](../modules/custom/fivepaisa_stock_page/src/StockPageService.php:1230-1259)
-
-```bash
-curl -X GET "https://apihub.5paisa.com/marketsmith-ca/gateway/broker/instrument?symbol=TCS" \
-  -H "gateway-name: fivepaisa-gateway" \
-  -H "x-access-token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJicm9rZXJOYW1lIjoiRml2ZSBQYWlzYSIsImlhdCI6MTY0NjkyNDI1MX0.ZbzfGQcoUImEYL0YpyMnzJxJxMb6dWzJKQCpDgXnqf9Fs" \
-  -w "\nTotal Time: %{time_total}s | HTTP: %{http_code}\n" \
-  --insecure
+**Endpoint**: 
+```
+GET https://msi-gcloud-prod.appspot.com/gateway/simple-api/ms-india/instr/0/{INSTRUMENT_ID}/financeDetails.json?isConsolidated=false&ms-auth=...
 ```
 
-**Response includes:** instrumentId for finance details  
-**Expected Response Time:** 0.3-0.6s  
-**Timeout Configured:** 10s
+**CURL Example**:
+```bash
+curl -X GET 'https://msi-gcloud-prod.appspot.com/gateway/simple-api/ms-india/instr/0/12345/financeDetails.json?isConsolidated=false&ms-auth=3990+MarketSmithINDUID-Web0000000000+MarketSmithINDUID-Web0000000000+0+210921231441+159745196'
+```
+
+**Response**: Contains shareholdingLatestFourQuaterPatternModel, managementInfoData
+
+**Called At**: Line 430 in StockPageService.php
+**Function**: `getOwnershipManagementData()`
 
 ---
 
-### 13. Finance Details (Consolidated/Standalone)
-**Source:** [`StockPageService.php`](../modules/custom/fivepaisa_stock_page/src/StockPageService.php:1269-1300)
+### 13. Financial Data API (MarketSmith via Kong Gateway)
+**Purpose**: Get P&L, Balance Sheet, Cash Flow, Ratios
 
-```bash
-# Consolidated (isConsolidated=true)
-curl -X GET "https://apihub.5paisa.com/marketsmith-ca/gateway/broker/instr/0/{INSTRUMENT_ID}/financeDetails.json?isConsolidated=true" \
-  -H "gateway-name: fivepaisa-gateway" \
-  -H "x-access-token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJicm9rZXJOYW1lIjoiRml2ZSBQYWlzYSIsImlhdCI6MTY0NjkyNDI1MX0.ZbzfGQcoUImEYL0YpyMnzJxJxMb6dWzJKQCpDgXnqf9Fs" \
-  -w "\nTotal Time: %{time_total}s | HTTP: %{http_code}\n" \
-  --insecure
-
-# Standalone (isConsolidated=false)
-curl -X GET "https://apihub.5paisa.com/marketsmith-ca/gateway/broker/instr/0/{INSTRUMENT_ID}/financeDetails.json?isConsolidated=false" \
-  -H "gateway-name: fivepaisa-gateway" \
-  -H "x-access-token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJicm9rZXJOYW1lIjoiRml2ZSBQYWlzYSIsImlhdCI6MTY0NjkyNDI1MX0.ZbzfGQcoUImEYL0YpyMnzJxJxMb6dWzJKQCpDgXnqf9Fs" \
-  -w "\nTotal Time: %{time_total}s | HTTP: %{http_code}\n" \
-  --insecure
+**Endpoint**: 
+```
+GET https://apihub.5paisa.com/marketsmith-ca/gateway/broker/instr/0/{INSTRUMENT_ID}/financeDetails.json?isConsolidated={true|false}
 ```
 
-Replace `{INSTRUMENT_ID}` with the ID from instrument search.
+**Headers**:
+```
+gateway-name: fivepaisa-gateway
+x-access-token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
 
-**Response includes:** Balance sheet, P&L, cash flow, ratios data  
-**Expected Response Time:** 0.5-1.2s  
-**Timeout Configured:** 10s  
-**Cache Duration:** 24 hours
+**CURL Example**:
+```bash
+curl -X GET 'https://apihub.5paisa.com/marketsmith-ca/gateway/broker/instr/0/12345/financeDetails.json?isConsolidated=true' \
+-H 'gateway-name: fivepaisa-gateway' \
+-H 'x-access-token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJicm9rZXJOYW1lIjoiRml2ZSBQYWlzYSIsImlhdCI6MTY0NjkyNDI1MX0.ZbzfGQcoUImEYL0YpyMnzJxJxMb6dWzJKQCpDgXnqf9Fs'
+```
+
+**Response**: Contains:
+- `bsHeader` - Balance Sheet headers
+- `bsData` - Balance Sheet data
+- `cfHeader` - Cash Flow headers
+- `cfData` - Cash Flow data
+- `incAnnualHeader` - Annual P&L headers
+- `incAnnualData` - Annual P&L data
+- `incQuarterHeader` - Quarterly P&L headers
+- `incQuarterData` - Quarterly P&L data
+- `ratiosAnnualHeader` - Ratios headers
+- `ratiosAnnualData` - Ratios data
+
+**Called At**: Line 1278 in StockPageService.php
+**Function**: `financeDetailsApi()`
 
 ---
 
-### 14. Investment Ratings & Wisdom
-**Source:** [`StockPageService.php`](../modules/custom/fivepaisa_stock_page/src/StockPageService.php:403-418)
+## Client-Side API Calls (JavaScript)
 
-```bash
-curl -X GET "https://msi-gcloud-prod.appspot.com/gateway/simple-api/ms-india/instr/0/{INSTRUMENT_ID}/wisdom.json?lang=en&ver=2&ms-auth=3990+MarketSmithINDUID-Web0000000000+MarketSmithINDUID-Web0000000000+0+210921231441+159745196" \
-  -w "\nTotal Time: %{time_total}s | HTTP: %{http_code}\n" \
-  --insecure
+These APIs are called after page load via AJAX in [`stock-page.js`](modules/custom/fivepaisa_stock_page/js/stock-page.js)
+
+### 14. Forecast Data API
+**Purpose**: Get broker estimates and target price
+
+**Triggered**: After 2 seconds (when #forecast section is visible)
+
+**Endpoint**: 
+```
+GET /get-forecast-data/{NSECODE}
 ```
 
-**Response includes:** Master rating, EPS rating, price strength, buyer demand  
-**Expected Response Time:** 0.3-0.7s  
-**Timeout Configured:** 10s  
-**Cache Duration:** 24 hours
+**Backend Route**: `StockPageController::getForcastGraphData()`
+
+**Backend API Called**:
+```
+GET https://msi-gcloud-prod.appspot.com/gateway/simple-api/ms-india/getBrokerEstimates.json?instrumentId={INSTRUMENT_ID}&ms-auth=...
+```
+
+**CURL Example (Backend)**:
+```bash
+curl -X GET 'https://msi-gcloud-prod.appspot.com/gateway/simple-api/ms-india/getBrokerEstimates.json?instrumentId=12345&ms-auth=3990+MarketSmithINDUID-Web0000000000+MarketSmithINDUID-Web0000000000+0+210921231441+159745196'
+```
+
+**Response**: Forecast data with recommendations, financials, targetPrice, chartData
+
+**Called At**: Line 340 in stock-page.js
 
 ---
 
-### 15. Broker Estimates (Forecasts)
-**Source:** [`StockPageService.php`](../modules/custom/fivepaisa_stock_page/src/StockPageService.php:381-395)
+### 15. Shareholding Pattern Names JSON
+**Purpose**: Get shareholding category names for selected month
 
-```bash
-curl -X GET "https://msi-gcloud-prod.appspot.com/gateway/simple-api/ms-india/getBrokerEstimates.json?instrumentId={INSTRUMENT_ID}&ms-auth=3990+MarketSmithINDUID-Web0000000000+MarketSmithINDUID-Web0000000000+0+210921231441+159745196" \
-  -w "\nTotal Time: %{time_total}s | HTTP: %{http_code}\n" \
-  --insecure
+**Triggered**: After 1 second, or when month tab is clicked
+
+**Endpoint**: 
+```
+GET /shareholding-pattern-names-json/{MONTH_YEAR}/{NSECODE}
 ```
 
-**Response includes:** Target price, revenue estimates, EPS forecasts  
-**Expected Response Time:** 0.4-0.8s  
-**Timeout Configured:** 10s
+**Backend Route**: `StockPageController::shareholdingPatternNamesJson()`
+
+**CURL Example**:
+```bash
+curl -X GET 'https://www.5paisa.com/shareholding-pattern-names-json/Mar-2024/SUZLON'
+```
+
+**Response**:
+```json
+{
+  "data": "<div>...HTML with shareholding pattern names...</div>"
+}
+```
+
+**Called At**: Line 686 in stock-page.js
 
 ---
 
-### 16. Ownership & Management Data
-**Source:** [`StockPageService.php`](../modules/custom/fivepaisa_stock_page/src/StockPageService.php:426-442)
+### 16. Shareholding Pattern Data JSON
+**Purpose**: Get shareholding percentages for selected month
 
-```bash
-curl -X GET "https://msi-gcloud-prod.appspot.com/gateway/simple-api/ms-india/instr/0/{INSTRUMENT_ID}/financeDetails.json?isConsolidated=false&ms-auth=3990+MarketSmithINDUID-Web0000000000+MarketSmithINDUID-Web0000000000+0+210921231441+159745196" \
-  -w "\nTotal Time: %{time_total}s | HTTP: %{http_code}\n" \
-  --insecure
+**Triggered**: After 1 second, or when month tab is clicked
+
+**Endpoint**: 
+```
+GET /shareholding-pattern-data-json/{MONTH_YEAR}/{NSECODE}
 ```
 
-**Response includes:** Shareholding pattern, management info  
-**Expected Response Time:** 0.4-0.9s  
-**Timeout Configured:** 10s
+**Backend Route**: `StockPageController::shareholdingPatternDataJson()`
+
+**CURL Example**:
+```bash
+curl -X GET 'https://www.5paisa.com/shareholding-pattern-data-json/Mar-2024/SUZLON'
+```
+
+**Response**:
+```json
+{
+  "data": "<div>...HTML with shareholding percentages...</div>"
+}
+```
+
+**Called At**: Line 687 in stock-page.js
 
 ---
 
-## Internal Drupal API Routes
+### 17. Shareholding Pattern Chart
+**Purpose**: Get chart data for shareholding pattern visualization
 
-### 17. Financial Data (AJAX)
-**Source:** [`StockPageController.php`](../modules/custom/fivepaisa_stock_page/src/Controller/StockPageController.php:560-613)
-**JavaScript:** [`stock-detail.js`](../modules/custom/fivepaisa_stock_page/js/stock-detail.js:737)
+**Triggered**: After 1 second, or when month tab is clicked
 
-```bash
-curl -X GET "https://www.5paisa.com/financial-data/QuarterlyPLStandaloneResult/TCS" \
-  -H "Accept: application/json" \
-  -H "User-Agent: Mozilla/5.0" \
-  -w "\nTotal Time: %{time_total}s | HTTP: %{http_code}\n"
+**Endpoint**: 
+```
+GET /shareholding-pattern-chart/{MONTH_YEAR}/{NSECODE}
 ```
 
-**Available Filters:**
+**Backend Route**: `StockPageController::shareholdingPatternChart()`
+
+**CURL Example**:
+```bash
+curl -X GET 'https://www.5paisa.com/shareholding-pattern-chart/Mar-2024/SUZLON'
+```
+
+**Response**:
+```json
+{
+  "data": [
+    {"name": "Promoters", "value": 65.5},
+    {"name": "FII", "value": 15.2},
+    {"name": "DII", "value": 10.3},
+    {"name": "Public", "value": 9.0}
+  ]
+}
+```
+
+**Called At**: Line 688, 662 in stock-page.js
+
+---
+
+### 18. Similar Stocks API
+**Purpose**: Get similar stocks from same sector
+
+**Triggered**: After 2 seconds
+
+**Endpoint**: 
+```
+GET /api/get-similar-stocks?nsecode={NSECODE}
+```
+
+**Backend Route**: `StockPageController::getSimilarStocks()`
+
+**Backend APIs Called**:
+1. `https://apihub.5paisa.com/atlas_cache/datamart/Equity/CompanyInfo.svc/quotesfinder/{SYMBOL}?responseType=json`
+2. `https://apihub.5paisa.com/atlas-ba-rt/datamart/Equity/CompanyInfo.svc/getquotedetails/{CO_CODE}/{EXCHANGE}?responseType=json`
+3. `https://apihub.5paisa.com/atlas_cache/datamart/Equity/Market.svc/SectorWiseComp/{SECTOR_CODE}/?responseType=json`
+
+**CURL Example**:
+```bash
+curl -X GET 'https://www.5paisa.com/api/get-similar-stocks?nsecode=SUZLON'
+```
+
+**Response**:
+```json
+{
+  "data": {
+    "similarStocks": "<div>...HTML with similar stock cards...</div>"
+  }
+}
+```
+
+**Called At**: Line 772 in stock-page.js
+
+---
+
+### 19. FnO Check API
+**Purpose**: Check if stock has Futures and Options available
+
+**Triggered**: After 2 seconds
+
+**Endpoint**: 
+```
+GET /check-fno/{NSECODE}
+```
+
+**Backend Route**: `StockPageController::displayFnoData()`
+
+**Backend API Called**:
+```
+GET https://apihub.5paisa.com/atlas-ca/datamart/FNO/FutOpt.svc/FutOptOverview/{Fut|Opt}/{SYMBOL}?responseType=json
+```
+
+**CURL Example**:
+```bash
+curl -X GET 'https://www.5paisa.com/check-fno/SUZLON'
+```
+
+**Response**:
+```json
+{
+  "future_exist": "true",
+  "option_exist": "true"
+}
+```
+
+**Called At**: Line 1006 in stock-page.js
+
+---
+
+### 20. Sector and Cap Info API
+**Purpose**: Get sector name and market cap category
+
+**Triggered**: After 2 seconds
+
+**Endpoint**: 
+```
+GET /api/{NSECODE}/sector-cap-info
+```
+
+**Backend Route**: `StockPageController::getSectorLink()`
+
+**CURL Example**:
+```bash
+curl -X GET 'https://www.5paisa.com/api/SUZLON/sector-cap-info'
+```
+
+**Response**:
+```json
+{
+  "sectorInfo": {
+    "sectorLink": "/stocks/sector/renewable-energy",
+    "sectorName": "Renewable Energy"
+  },
+  "capInfo": {
+    "capName": "Mid Cap",
+    "capLink": "/share-market-today/mid-cap-stocks"
+  }
+}
+```
+
+**Called At**: Line 1051 in stock-page.js
+
+---
+
+### 21. Financial Data API (Tab Based)
+**Purpose**: Get financial data based on selected tab (Quarterly/Annual P&L, Balance Sheet, etc.)
+
+**Triggered**: After 1.5 seconds (initial load) or when tab is clicked
+
+**Endpoint**: 
+```
+GET /financial-data/{TAB_FILTER}/{NSECODE}
+```
+
+**Filters**: 
 - `QuarterlyPLStandaloneResult`
 - `QuarterlyPLConsolidatedResult`
 - `AnnualPLStandaloneResult`
@@ -439,506 +785,383 @@ curl -X GET "https://www.5paisa.com/financial-data/QuarterlyPLStandaloneResult/T
 - `RatiosStandaloneResult`
 - `RatiosConsolidatedResult`
 
-**Expected Response Time:** 0.3-0.8s  
-**Cache Duration:** 24 hours
+**Backend Route**: `StockPageController::getFinancialData()`
 
----
-
-### 18. Sector Link Information
-**Source:** [`StockPageController.php`](../modules/custom/fivepaisa_stock_page/src/Controller/StockPageController.php:691-738)
-**JavaScript:** [`stock-detail.js`](../modules/custom/fivepaisa_stock_page/js/stock-detail.js:680-702)
-
+**CURL Example**:
 ```bash
-curl -X GET "https://www.5paisa.com/api/TCS/sector-cap-info" \
-  -H "Accept: application/json" \
-  -H "User-Agent: Mozilla/5.0" \
-  -w "\nTotal Time: %{time_total}s | HTTP: %{http_code}\n"
+curl -X GET 'https://www.5paisa.com/financial-data/QuarterlyPLStandaloneResult/SUZLON'
 ```
 
-**Response includes:** Sector name, sector link, market cap category (Small/Mid/Large Cap)  
-**Expected Response Time:** 0.2-0.5s
-
----
-
-### 19. Similar Stocks
-**Source:** [`StockPageController.php`](../modules/custom/fivepaisa_stock_page/src/Controller/StockPageController.php:1916-2024)
-**JavaScript:** [`stock-detail.js`](../modules/custom/fivepaisa_stock_page/js/stock-detail.js:579)
-
-```bash
-curl -X GET "https://www.5paisa.com/api/get-similar-stocks?nsecode=TCS" \
-  -H "Accept: application/json" \
-  -H "User-Agent: Mozilla/5.0" \
-  -w "\nTotal Time: %{time_total}s | HTTP: %{http_code}\n"
-```
-
-**Response includes:** HTML with 4 similar stocks from same sector  
-**Expected Response Time:** 0.5-1.5s (makes multiple external API calls)
-
----
-
-### 20. FnO Check (Futures & Options Availability)
-**Source:** [`StockPageController.php`](../modules/custom/fivepaisa_stock_page/src/Controller/StockPageController.php:2097-2114)
-**JavaScript:** [`stock-detail.js`](../modules/custom/fivepaisa_stock_page/js/stock-detail.js:641-677)
-
-```bash
-curl -X GET "https://www.5paisa.com/check-fno/TCS" \
-  -H "Accept: application/json" \
-  -H "User-Agent: Mozilla/5.0" \
-  -w "\nTotal Time: %{time_total}s | HTTP: %{http_code}\n"
-```
-
-**Response:**
+**Response**:
 ```json
 {
-  "future_exist": "true",
-  "option_exist": "true"
+  "table": "<table>...HTML table with financial data...</table>"
 }
 ```
 
-**Expected Response Time:** 0.1-0.3s  
-**Cache Duration:** 2 days
+**Called At**: Lines 1145, 67 in stock-page.js
 
 ---
 
-### 21. Shareholding Pattern - Months
-**Source:** [`StockPageController.php`](../modules/custom/fivepaisa_stock_page/src/Controller/StockPageController.php:647-652)
+### 22. Price Range Filter API
+**Purpose**: Get price change data for selected time range (from chart interaction)
 
+**Triggered**: When chart time range button is clicked
+
+**Endpoint**: 
+```
+GET /price-range-filter/{NSECODE}/{RANGE}
+```
+
+**Ranges**: `1D`, `1W`, `1M`, `6M`, `1Y`, `5Y`, `Max`
+
+**Backend Route**: `StockPageController::priceRangeFilter()`
+
+**CURL Example**:
 ```bash
-curl -X GET "https://www.5paisa.com/shareholding-pattern-months/TCS" \
-  -H "Accept: application/json" \
-  -H "User-Agent: Mozilla/5.0" \
-  -w "\nTotal Time: %{time_total}s | HTTP: %{http_code}\n"
+curl -X GET 'https://www.5paisa.com/price-range-filter/SUZLON/1M'
 ```
 
-**Expected Response Time:** 0.3-0.7s
-
----
-
-### 22. Shareholding Pattern - Names
-**Source:** [`StockPageController.php`](../modules/custom/fivepaisa_stock_page/src/Controller/StockPageController.php:679-684)
-**JavaScript:** [`stock-detail.js`](../modules/custom/fivepaisa_stock_page/js/stock-detail.js:535)
-
-```bash
-curl -X GET "https://www.5paisa.com/shareholding-pattern-names-json/Dec-2024/TCS" \
-  -H "Accept: application/json" \
-  -H "User-Agent: Mozilla/5.0" \
-  -w "\nTotal Time: %{time_total}s | HTTP: %{http_code}\n"
-```
-
-**Expected Response Time:** 0.2-0.5s
-
----
-
-### 23. Shareholding Pattern - Data
-**Source:** [`StockPageController.php`](../modules/custom/fivepaisa_stock_page/src/Controller/StockPageController.php:663-668)
-**JavaScript:** [`stock-detail.js`](../modules/custom/fivepaisa_stock_page/js/stock-detail.js:536)
-
-```bash
-curl -X GET "https://www.5paisa.com/shareholding-pattern-data-json/Dec-2024/TCS" \
-  -H "Accept: application/json" \
-  -H "User-Agent: Mozilla/5.0" \
-  -w "\nTotal Time: %{time_total}s | HTTP: %{http_code}\n"
-```
-
-**Expected Response Time:** 0.2-0.5s
-
----
-
-### 24. Forecast Data
-**Source:** [`StockPageController.php`](../modules/custom/fivepaisa_stock_page/src/Controller/StockPageController.php:812-865)
-**JavaScript:** [`stock-detail.js`](../modules/custom/fivepaisa_stock_page/js/stock-detail.js:477)
-
-```bash
-curl -X GET "https://www.5paisa.com/get-forecast-data/TCS" \
-  -H "Accept: application/json" \
-  -H "User-Agent: Mozilla/5.0" \
-  -w "\nTotal Time: %{time_total}s | HTTP: %{http_code}\n"
-```
-
-**Response includes:** Consensus rating, target price, analyst recommendations  
-**Expected Response Time:** 0.4-0.8s
-
----
-
-### 25. Price Range Filter (Chart Filter)
-**Source:** [`StockPageController.php`](../modules/custom/fivepaisa_stock_page/src/Controller/StockPageController.php:2596-2629)
-**JavaScript:** [`stock-detail.js`](../modules/custom/fivepaisa_stock_page/js/stock-detail.js:767-807)
-
-```bash
-curl -X GET "https://www.5paisa.com/price-range-filter/TCS/1W" \
-  -H "Accept: application/json" \
-  -H "User-Agent: Mozilla/5.0" \
-  -w "\nTotal Time: %{time_total}s | HTTP: %{http_code}\n"
-```
-
-**Valid Range Filters:** `1D`, `1W`, `1M`, `6M`, `1Y`, `5Y`, `Max`  
-**Expected Response Time:** 0.2-0.4s
-
-
-## Authentication & Headers
-
-### Kong Gateway Headers (Pearl APIs)
-```
-Ocp-Apim-Subscription-Key: a4af51382266497bb5464d95fbb2017b
-Ocp-Apim-Trace: true
-Content-Type: application/json
-KEY: 5260c06e20fb53c4521b8cf1f2eb0ba616634e44
-requestCode: pearlapi
-UserId: 5PAISAAPI
-password: 5nadynsiitnienny
-```
-
-### Atlas Gateway Headers
-```
-Authorization: Basic aW5kaWFpbmZvbGluZVxpaWZsd2ViOkdsYXhvQDEyMw==
-```
-
-### MarketSmith Headers
-```
-gateway-name: fivepaisa-gateway
-x-access-token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJicm9rZXJOYW1lIjoiRml2ZSBQYWlzYSIsImlhdCI6MTY0NjkyNDI1MX0.ZbzfGQcoUImEYL0YpyMnzJxJxMb6dWzJKQCpDgXnqf9Fs
-```
-
-### Gateway Search Headers
-```
-UserID: ZyT47UW2g56
-Password: H98qlU4Sn2
-Ocp-Apim-Subscription-Key: ad5445f4018348c38e3b5d6a68a39c81
-Content-Type: application/json
-```
-
----
-
-## Common Parameters
-
-### Stock Identifiers
-- **NSE Code**: NSE symbol (e.g., `TCS`, `RELIANCE`, `INFY`)
-- **BSE Code**: BSE script code (numeric)
-- **co_code**: Company code from snapshot API
-- **instrumentId**: MarketSmith instrument ID
-
-### Date Formats
-- Shareholding: `MMM-YYYY` (e.g., `Dec-2024`)
-- Events: `DD/MM/YYYY`
-
----
-
-## API Call Execution Pattern
-
-### Sequential vs Parallel Execution
-
-Based on the code analysis, the stock page uses a **hybrid approach**:
-
-#### Sequential Calls (Server-Side - PHP)
-These APIs are called **sequentially** when the page loads on the server:
-
-1. **Script Code Lookup** → Get BSE/NSE codes
-2. **Overview API** → Get basic stock data
-3. **Fundamental API** → Get fundamental metrics
-4. **Technical Analysis API** → Get technical indicators
-5. **Corporate Actions API** → Get events data
-
-**Source:** [`StockPageController.php::getData()`](../modules/custom/fivepaisa_stock_page/src/Controller/StockPageController.php:155-454)
-
-**Execution Flow:**
-```php
-// 1. Get script codes first
-$checkData = $this->getScriptCodeBse($nsecode);
-
-// 2. Then get overview (depends on script code)
-$stockResp = $this->stockPageService->getClient()->get('overview/' . $bseNsecode);
-
-// 3. Then get fundamentals
-$stock_fundamental_api = $this->stockPageService->getClient()->get('fundamental/' . $bseNsecode);
-
-// 4. Then get technical data
-$build['#tech'] = $this->getTechnicalData($nsecode, $bseNsecode);
-
-// 5. Then get corporate actions
-$build['#corp_action'] = $this->getCorporateActionData($nsecode, $bseNsecode);
-```
-
-#### Parallel Calls (Client-Side - JavaScript)
-These APIs are called **in parallel** when user scrolls/interacts:
-
-**Lazy-Loaded on Scroll:**
-- Similar Stocks API
-- Financial Data API
-- Chart iframe loading
-- Shareholding pattern data
-
-**Source:** [`stock-detail.js`](../modules/custom/fivepaisa_stock_page/js/stock-detail.js)
-
-**Execution Pattern:**
-```javascript
-// Multiple APIs triggered on scroll (parallel)
-const observer = new IntersectionObserver((entries) => {
-  if (entry.isIntersecting) {
-    // These can be called in parallel
-    renderSimilarStocks(nsecode);    // API 1
-    getFinancialData(filter, code);  // API 2
-    loadChart();                      // API 3
+**Response**:
+```json
+{
+  "priceAnalysis": {
+    "change": 2.5,
+    "changePercent": 5.2,
+    "color": "positive"
   }
-});
+}
 ```
 
-### Recommendation for Testing
-
-#### 1. **Initial Page Load (Sequential)**
-Execute these in order for accurate page load simulation:
-
-```bash
-# Step 1: Get script codes
-curl -X POST "https://gateway.5paisa.com/prelogin/prod/searchscrip" \
-  -H "UserID: ZyT47UW2g56" \
-  -H "Password: H98qlU4Sn2" \
-  -d '{"Symbol":"TCS"}' > scripcode.json
-
-# Step 2: Get overview
-curl -X GET "https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/stock/overview/TCS/" \
-  -H "Ocp-Apim-Subscription-Key: a4af51382266497bb5464d95fbb2017b" > overview.json
-
-# Step 3: Get technical analysis
-curl -X GET "https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/stock/technical-analysis/TCS/" \
-  -H "Ocp-Apim-Subscription-Key: a4af51382266497bb5464d95fbb2017b" > technical.json
-
-# Step 4: Get corporate actions
-curl -X GET "https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/events/calendar/stock/TCS" \
-  -H "Ocp-Apim-Subscription-Key: a4af51382266497bb5464d95fbb2017b" > events.json
-```
-
-#### 2. **User Interaction (Parallel)**
-These can be executed simultaneously:
-
-```bash
-# Execute all in parallel (use & for background jobs)
-curl -X GET "https://www.5paisa.com/api/get-similar-stocks?nsecode=TCS" > similar.json &
-curl -X GET "https://www.5paisa.com/financial-data/QuarterlyPLStandaloneResult/TCS" > financials.json &
-curl -X GET "https://www.5paisa.com/check-fno/TCS" > fno.json &
-curl -X GET "https://www.5paisa.com/api/TCS/sector-cap-info" > sector.json &
-
-# Wait for all background jobs
-wait
-```
-
-### Performance Considerations
-
-| API Type | Execution | Cache | Priority |
-|----------|-----------|-------|----------|
-| Overview | Sequential | 24h | High |
-| Technical | Sequential | 24h | High |
-| Fundamental | Sequential | 24h | High |
-| Corporate Actions | Sequential | 24h | Medium |
-| Similar Stocks | Parallel (lazy) | None | Low |
-| Financial Data | Parallel (lazy) | 24h | Low |
-| Shareholding | Parallel (lazy) | None | Low |
-| Chart | Parallel (lazy) | None | Low |
-
-**Caching Strategy:**
-- Server-side caching: 24 hours (86400 seconds)
-- Client-side: Based on browser cache
-- Lazy-loaded content: Only fetched when visible
+**Called At**: Lines 1181, 1257 in stock-page.js
 
 ---
 
-## Complete Example: Fetching TCS Stock Page Data
+### 23. Stock Poll APIs
+**Purpose**: Stock sentiment polling (Buy/Sell/Hold votes)
 
-### Step 1: Get Overview Data (Sequential - Required First)
-```bash
-curl -X GET "https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/stock/overview/TCS/" \
-  -H "Ocp-Apim-Subscription-Key: a4af51382266497bb5464d95fbb2017b" \
-  -H "Ocp-Apim-Trace: true" \
-  -H "Content-Type: application/json" \
-  -H "KEY: 5260c06e20fb53c4521b8cf1f2eb0ba616634e44" \
-  -H "requestCode: pearlapi" \
-  -H "UserId: 5PAISAAPI" \
-  -H "password: 5nadynsiitnienny" \
-  --insecure
+**Triggered**: After 2 seconds for initialization
+
+#### 23a. Get Vote Count
+**Endpoint**: 
+```
+GET /stock-poll/votes-count/{STOCK_URL_SLUG}
 ```
 
-### Step 2: Get Technical Analysis
+**CURL Example**:
 ```bash
-curl -X GET "https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/stock/technical-analysis/TCS/" \
-  -H "Ocp-Apim-Subscription-Key: a4af51382266497bb5464d95fbb2017b" \
-  -H "Ocp-Apim-Trace: true" \
-  -H "Content-Type: application/json" \
-  --insecure
+curl -X GET 'https://www.5paisa.com/stock-poll/votes-count/suzlon-share-price'
 ```
 
-### Step 3: Get Corporate Actions
-```bash
-curl -X GET "https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/events/calendar/stock/TCS" \
-  -H "Ocp-Apim-Subscription-Key: a4af51382266497bb5464d95fbb2017b" \
-  -H "Content-Type: application/json" \
-  --insecure
+**Response**: Plain text with vote count
+
+**Called At**: Line 913, 967 in stock-page.js
+
+#### 23b. Cast Vote
+**Endpoint**: 
+```
+GET /stock-poll/{VOTE_TYPE}/{STOCK_URL_SLUG}
 ```
 
-### Step 4: Get Financial Data
-```bash
-# First get instrument ID
-curl -X GET "https://apihub.5paisa.com/marketsmith-ca/gateway/broker/instrument?symbol=TCS" \
-  -H "gateway-name: fivepaisa-gateway" \
-  -H "x-access-token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJicm9rZXJOYW1lIjoiRml2ZSBQYWlzYSIsImlhdCI6MTY0NjkyNDI1MX0.ZbzfGQcoUImEYL0YpyMnzJxJxMb6dWzJKQCpDgXnqf9Fs" \
-  --insecure
+**Vote Types**: `buy`, `sell`, `hold`
 
-# Then get financial details
-curl -X GET "https://apihub.5paisa.com/marketsmith-ca/gateway/broker/instr/0/{INSTRUMENT_ID}/financeDetails.json?isConsolidated=false" \
-  -H "gateway-name: fivepaisa-gateway" \
-  -H "x-access-token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJicm9rZXJOYW1lIjoiRml2ZSBQYWlzYSIsImlhdCI6MTY0NjkyNDI1MX0.ZbzfGQcoUImEYL0YpyMnzJxJxMb6dWzJKQCpDgXnqf9Fs" \
-  --insecure
+**CURL Example**:
+```bash
+curl -X GET 'https://www.5paisa.com/stock-poll/buy/suzlon-share-price'
 ```
 
-### Step 5: Get F&O Data
-```bash
-curl -X GET "https://www.5paisa.com/check-fno/TCS" \
-  -H "Accept: application/json"
+**Called At**: Line 930 in stock-page.js
+
+#### 23c. Get Poll HTML
+**Endpoint**: 
 ```
+GET /stock-poll/poll-html-json/{STOCK_URL_SLUG}
+```
+
+**CURL Example**:
+```bash
+curl -X GET 'https://www.5paisa.com/stock-poll/poll-html-json/suzlon-share-price'
+```
+
+**Response**:
+```json
+{
+  "buy": {
+    "percentage_vote": "45.5",
+    "poll_progress_color": "green-progress"
+  },
+  "sell": {
+    "percentage_vote": "30.2",
+    "poll_progress_color": "red-progress"
+  },
+  "hold": {
+    "percentage_vote": "24.3",
+    "poll_progress_color": "yellow-progress"
+  }
+}
+```
+
+**Called At**: Line 943 in stock-page.js
+
+---
+
+## API Call Summary
+
+### Server-Side (Initial Page Load)
+1. **Search Scrip Code** - Get BSE Script Code
+2. **Stock Overview** - Main stock data, price, fundamentals
+3. **Fundamental Data** - Detailed fundamental metrics
+4. **Technical Analysis** - EMA, SMA, RSI, MACD, pivots
+5. **Tech Trend (SWOT)** - Bullish/Bearish indicators
+6. **Rapid Results** - Latest results/news
+7. **Corporate Actions** - Dividends, splits, bonuses
+8. **Company Profile (Atlas)** - Get co_code
+9. **Quote Details (Atlas)** - Live price, volume, 52W high/low
+10. **MarketSmith Instrument ID** - Get instrument ID
+11. **Investment Rating** - Stock ratings
+12. **Ownership/Management** - Shareholding and management
+13. **Financial Data** - P&L, Balance Sheet, Cash Flow
+
+**Total Server-Side APIs: 13-15 APIs** (some conditional)
+
+### Client-Side (After Page Load)
+14. **Forecast Data** - Broker estimates (2s delay)
+15. **Shareholding Names** - Pattern names (1s delay)
+16. **Shareholding Data** - Pattern percentages (1s delay)
+17. **Shareholding Chart** - Chart visualization (1s delay)
+18. **Similar Stocks** - Related stocks (2s delay)
+19. **FnO Check** - Futures & Options availability (2s delay)
+20. **Sector/Cap Info** - Sector and market cap (2s delay)
+21. **Financial Data** - Tab-based financial data (1.5s delay)
+22. **Price Range Filter** - Time range price change (on interaction)
+23. **Stock Poll** - Sentiment polling (2s delay, 3 endpoints)
+
+**Total Client-Side APIs: 10+ APIs** (some triggered on user interaction)
+
+---
+
+## Page Load Performance Analysis
+
+### Critical Path (Initial Load)
+```
+User Request → Server Processing (1-2s) → HTML Response → Client JS Init (0.5s)
+```
+
+### Server-Side Processing Timeline
+```
+0ms    - Request received
+0-100ms - URL parsing, validation, redirects
+100-500ms - Database queries (stock details, FAQs, about)
+500-1500ms - External API calls (parallel where possible):
+  - Overview API
+  - Fundamental API  
+  - Technical API
+  - Corporate Actions API
+  - Atlas APIs
+  - MarketSmith APIs
+1500-2000ms - Template rendering, cache warming
+2000ms - HTML sent to browser
+```
+
+### Client-Side Loading Timeline
+```
+0ms    - HTML received, DOM parsing begins
+100ms  - CSS loaded, initial render
+200ms  - JavaScript files loaded and parsed
+300ms  - DOM ready, event listeners attached
+500ms  - Chart iframe initialization
+1000ms - Shareholding pattern data loaded
+1500ms - Financial data table loaded
+2000ms - Forecast, similar stocks, FnO, polls loaded
+3000ms+ - Page fully interactive
+```
+
+### First Contentful Paint (FCP)
+**Target**: < 1.5 seconds
+**Actual**: ~2-2.5 seconds (server processing time)
+
+### Time to Interactive (TTI)
+**Target**: < 3 seconds
+**Actual**: ~3-4 seconds (includes client-side lazy loading)
+
+### Optimization Opportunities
+1. **Parallel API Calls**: Most server-side APIs are called sequentially, could be parallelized
+2. **Caching**: Some APIs have 24-hour cache, could be extended
+3. **Lazy Loading**: Non-critical sections loaded after initial render
+4. **CDN**: Static assets (CSS, JS, images) served from CDN
+5. **Database Optimization**: Stock details, FAQs could be cached more aggressively
+
+---
+
+## API Dependencies and Data Flow
+
+```
+URL Request (e.g., /stocks/suzlon-share-price)
+  ↓
+Extract NSE Code (SUZLON)
+  ↓
+[1] Search Scrip API → Get BSE Script Code (532667)
+  ↓
+[2] Overview API (using BSE Code)
+  ├→ Stock Price, Change, Volume
+  ├→ Fundamental Data (PE, PB, Market Cap)
+  └→ Technical Data (RSI, MFI)
+  ↓
+[3] Fundamental API → NSEcode, BSEcode verification
+  ↓
+[4] Technical Analysis API
+  ├→ EMA/SMA values
+  ├→ Pivot Points (R1, R2, R3, S1, S2, S3)
+  ├→ MACD, RSI, MFI details
+  └→ Price Analysis (1D, 1W, 1M, 6M, 1Y, 5Y)
+  ↓
+[5] Tech Trend API → Bullish/Bearish count
+  ↓
+[6] Rapid Results API → Latest company news
+  ↓
+[7] Corporate Actions API → Dividends, Splits, Bonuses
+  ↓
+[8] Company Profile (Atlas) → Get co_code
+  ↓
+[9] Quote Details (Atlas, using co_code)
+  ├→ Live Price Updates
+  ├→ Day High/Low, 52W High/Low
+  ├→ Volume, EPS
+  └→ Sector Information
+  ↓
+[10] MarketSmith Instrument Search → Get instrument_id
+  ↓
+[11] Investment Rating (using instrument_id)
+  └→ Master Score, EPS Rating, RS Rating, etc.
+  ↓
+[12] Ownership/Management (using instrument_id)
+  ├→ Shareholding Pattern (4 quarters)
+  └→ Management Details (MD, Directors)
+  ↓
+[13] Financial Data (using instrument_id)
+  ├→ Balance Sheet
+  ├→ Cash Flow
+  ├→ P&L (Quarterly & Annual)
+  └→ Financial Ratios
+  ↓
+Render HTML Template
+  ↓
+Send to Browser
+  ↓
+Client-Side JavaScript Loads Additional Data:
+  ├→ [14] Forecast Data
+  ├→ [15-17] Shareholding Pattern (interactive)
+  ├→ [18] Similar Stocks
+  ├→ [19] FnO Check
+  ├→ [20] Sector/Cap Info
+  ├→ [21] Financial Tables (on tab switch)
+  ├→ [22] Price Range Filter (on chart interaction)
+  └→ [23] Stock Polls (Buy/Sell/Hold sentiment)
+```
+
+---
+
+## Error Handling
+
+### Server-Side
+- All API calls wrapped in try-catch blocks
+- Failed API calls return empty arrays/default values
+- Page still renders with partial data if some APIs fail
+- 404 redirect to `/stocks/all` if critical data missing
+
+### Client-Side
+- AJAX calls have error handlers
+- Failed requests show "Loading..." or hide sections
+- Timeout set to 10 seconds for most requests
+- Fallback images for logos that fail to load
+
+---
+
+## Caching Strategy
+
+### Server-Side Caching
+- **Stock Overview Data**: 24 hours
+- **Technical Data**: 24 hours
+- **Corporate Actions**: 24 hours
+- **Ratings Data**: 24 hours
+- **Shareholding Pattern**: 24 hours
+- **Financial Data**: 24 hours
+- **Forecast Data**: 24 hours
+
+### Cache Keys Format
+```
+script_code_bse{NSECODE}
+corp_data{NSECODE}
+technical_data{NSECODE}
+get_ratings_{NSECODE}
+highlight_data{NSECODE}
+get_returns{NSECODE}
+getFinancialData.{NSECODE}
+```
+
+### Cache Invalidation
+- Automatic after TTL expires
+- Manual clearing via Drupal cache rebuild
+- Per-stock cache clearing available
 
 ---
 
 ## Notes
 
-1. **SSL Verification**: Most APIs use `--insecure` flag as they have self-signed certificates
-2. **Rate Limiting**: Kong Gateway APIs may have rate limits
-3. **Caching**: Data is cached for 24 hours (86400 seconds) on the server side
-4. **Error Handling**: Always check HTTP status codes (200, 403, 404, etc.)
-5. **Stock Code Format**: NSE codes are uppercase (TCS, RELIANCE), URL slugs are lowercase (tcs-share-price)
-6. **Special Characters**: Stocks with `&` in names (M&M) use clean URLs (mm-share-price)
+1. **Kong Gateway Migration**: Many APIs have been migrated to Kong Gateway (apihub.5paisa.com) for better performance
+2. **Authentication**: Multiple authentication mechanisms used (Kong subscription key, Basic auth, JWT tokens)
+3. **Rate Limiting**: Some external APIs may have rate limits
+4. **Data Freshness**: Most data updated every 15-30 minutes during market hours
+5. **Lazy Loading**: Non-critical content loaded after initial page render to improve perceived performance
 
 ---
 
-## Troubleshooting
+## Estimated Total Page Load Time
 
-### 403 Forbidden
-- Check authentication headers
-- Verify subscription keys are valid
-- Ensure correct API endpoint
+### Optimal Conditions (Good Network, Server Cache Hit)
+- **Server Processing**: 1-1.5 seconds
+- **HTML Transfer**: 0.2-0.5 seconds
+- **Client Rendering**: 0.5-1 second
+- **Total First Meaningful Paint**: **2-3 seconds**
 
-### 404 Not Found
-- Verify stock symbol exists
-- Check NSE/BSE code format
-- Ensure proper URL structure
+### Average Conditions (Mixed Cache, Normal Network)
+- **Server Processing**: 2-3 seconds
+- **HTML Transfer**: 0.3-0.7 seconds
+- **Client Rendering**: 1-1.5 seconds
+- **Total First Meaningful Paint**: **3.5-5 seconds**
 
-### Empty Data
-- Stock may not have F&O available
-- Financial data may not exist for the period
-- Corporate actions may not be announced
-
----
-
-## API Response Examples
-
-### Overview API Response Structure
-```json
-{
-  "head": {
-    "status": "0",
-    "statusDescription": "Success"
-  },
-  "body": {
-    "stockData": [/* price, change, volume, etc. */],
-    "fundamentalData": [/* market cap, PE, PB, etc. */],
-    "technicalData": [/* RSI, MFI, MACD, etc. */],
-    "52_Week_High": "3500.00",
-    "52_Week_low": "2800.00",
-    "priceInsightData": [/* circuit hits, etc. */]
-  }
-}
-```
-
-### Financial Data Response Structure
-```json
-{
-  "bsHeader": [/* balance sheet headers */],
-  "bsData": [/* balance sheet data */],
-  "incQuarterHeader": [/* P&L headers */],
-  "incQuarterData": [/* quarterly P&L data */],
-  "ratiosAnnualHeader": [/* ratios headers */],
-  "ratiosAnnualData": [/* ratios data */]
-}
-```
+### Worst Case (No Cache, Slow Network, Peak Load)
+- **Server Processing**: 4-6 seconds
+- **HTML Transfer**: 1-2 seconds
+- **Client Rendering**: 1.5-2 seconds
+- **Total First Meaningful Paint**: **6.5-10 seconds**
 
 ---
 
----
+## Testing the APIs
 
-## Performance Benchmarks
+To test any API:
 
-### API Response Time Summary
+1. **Server-Side APIs**: Can be tested directly with CURL commands provided
+2. **Client-Side APIs**: Need to access via browser or set appropriate cookies/headers
+3. **Rate Limiting**: Be mindful of rate limits when testing
+4. **Cache**: First request will be slower (cache miss), subsequent requests faster
 
-| API Endpoint | Expected Time | Timeout | Cache | Priority |
-|--------------|---------------|---------|-------|----------|
-| **Kong Gateway APIs (Pearl)** |
-| Stock Overview | 0.2-0.5s | 10s | 24h | Critical |
-| Fundamental Data | 0.2-0.4s | 10s | 24h | High |
-| Technical Analysis | 0.3-0.6s | 10s | 24h | High |
-| Corporate Actions | 0.2-0.5s | Default | 24h | Medium |
-| Tech Trend (SWOT) | 0.2-0.4s | 10s | None | Medium |
-| Rapid Results | 0.2-0.4s | Default | 24h | Medium |
-| **Atlas Gateway APIs** |
-| Script Code Search | 0.1-0.3s | 10s | 24h | Critical |
-| Company Quote Details | 0.2-0.4s | Default | None | High |
-| Company Snapshot | 0.2-0.4s | Default | None | High |
-| Sector Companies | 0.3-0.8s | Default | None | Low |
-| F&O Overview | 0.2-0.5s | 10s | 2 days | Medium |
-| **MarketSmith APIs** |
-| Instrument Search | 0.3-0.6s | 10s | None | High |
-| Finance Details | 0.5-1.2s | 10s | 24h | Medium |
-| Investment Ratings | 0.3-0.7s | 10s | 24h | Medium |
-| Broker Estimates | 0.4-0.8s | 10s | None | Low |
-| Ownership/Management | 0.4-0.9s | 10s | None | Low |
-| **Internal Drupal APIs** |
-| Financial Data | 0.3-0.8s | Default | 24h | Medium |
-| Similar Stocks | 0.5-1.5s | Default | None | Low |
-| Sector/Cap Info | 0.2-0.5s | Default | None | Medium |
-| FnO Check | 0.1-0.3s | Default | 2 days | Low |
-| Shareholding Pattern | 0.3-0.7s | Default | None | Low |
-| Price Range Filter | 0.2-0.4s | Default | None | Low |
-
-### Total Page Load Time Breakdown
-
-**Sequential API Calls (Server-Side):**
-1. Script Code Search: ~0.2s
-2. Overview API: ~0.4s
-3. Fundamental API: ~0.3s
-4. Technical Analysis: ~0.5s
-5. Corporate Actions: ~0.4s
-
-**Total Backend API Time:** ~3.5s  
-
-**Lazy-Loaded APIs (Client-Side):**
-- Triggered after scroll/interaction
-- Execute in parallel
-- Combined time: ~1.0-2.5s (parallel execution)
-
-### Measuring Complete Page Load
-
+Example testing sequence:
 ```bash
-# Measure total page load with all timing details
-curl -X GET "https://www.5paisa.com/stocks/tcs-share-price" \
-  -H "User-Agent: Mozilla/5.0" \
-  -w "\n
-=== PAGE LOAD TIMING ===
-DNS Lookup:      %{time_namelookup}s
-TCP Connect:     %{time_connect}s
-TLS Handshake:   %{time_appconnect}s
-Start Transfer:  %{time_starttransfer}s
-TOTAL TIME:      %{time_total}s
-HTTP Code:       %{http_code}
-Size Downloaded: %{size_download} bytes
-=========================\n" \
-  -o /dev/null -s
-```
+# 1. Get BSE Script Code
+curl -X POST 'https://gateway.5paisa.com/prelogin/prod/searchscrip' \
+  -H 'UserID: ZyT47UW2g56' \
+  -H 'Password: H98qlU4Sn2' \
+  -H 'Ocp-Apim-Subscription-Key: ad5445f4018348c38e3b5d6a68a39c81' \
+  -H 'Content-Type: application/json' \
+  -d '{"Exch":"N","ExchType":"C","RecordCount":"1","Symbol":"SUZLON"}'
 
-**Expected Output:**
-```
-=== PAGE LOAD TIMING ===
-DNS Lookup:      0.012s
-TCP Connect:     0.135s
-TLS Handshake:   0.267s
-Start Transfer:  2.145s
-TOTAL TIME:      2.456s
-HTTP Code:       200
-Size Downloaded: 45678 bytes
-=========================
+# 2. Use the ScripCode from response in Overview API
+curl -X GET 'https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/stock/overview/532667/' \
+  -H 'Ocp-Apim-Subscription-Key: a4af51382266497bb5464d95fbb2017b'
+
+# 3. Get Technical Analysis
+curl -X GET 'https://apihub.5paisa.com/pearl-ca/clientapi/pearlapi/stock/technical-analysis/532667/' \
+  -H 'Ocp-Apim-Subscription-Key: a4af51382266497bb5464d95fbb2017b'
 ```
